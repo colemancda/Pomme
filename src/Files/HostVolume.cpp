@@ -329,8 +329,9 @@ OSErr HostVolume::FSpDelete(const FSSpec* spec)
 {
 	auto path = ToPath(spec->parID, spec->cName);
 
-	if (fs::remove(path))
-		return noErr;
-	else
+	std::error_code ec;
+	bool removed = fs::remove(path, ec);
+	if (ec)
 		return fnfErr;
+	return removed ? noErr : fnfErr;
 }
