@@ -41,7 +41,17 @@ HostVolume::HostVolume(short vRefNum)
 	: Volume(vRefNum)
 {
 	// default directory (ID 0)
+#ifdef __3DS__
+	// fs::current_path() calls getcwd(), which stats the current directory
+	// through the emulated FS archive backend - on the RomFS mount this
+	// hangs (observed via Azahar's log freezing exactly at an archive-open
+	// delay-simulation message the moment this constructor runs). main.cpp
+	// already chdir()s to "romfs:/" before Pomme::Init() touches this, so
+	// just use that literal instead of round-tripping through getcwd().
+	directories.push_back(fs::path("romfs:/"));
+#else
 	directories.push_back(fs::current_path());
+#endif
 }
 
 //-----------------------------------------------------------------------------
