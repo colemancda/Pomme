@@ -177,11 +177,31 @@ void cmixer::SetMasterGain(double newGain)
 
 void Mixer::Lock()
 {
+	// sdlAudioMutex is null if InitWithSDL() was never called (e.g. built
+	// with POMME_NO_SOUND_MIXER, or no audio driver was available at
+	// startup) - every Source::Play/Clear/RemoveFromMixer call funnels
+	// through here, so guarding just this one spot lets the whole sound
+	// system degrade to a harmless no-op instead of dereferencing a null
+	// SDL_Mutex*.
+	if (!sdlAudioMutex)
+	{
+		static bool warned = false;
+		if (!warned)
+		{
+			warned = true;
+			SDL_Log("cmixer: no audio driver/mixer available - sound playback disabled");
+		}
+		return;
+	}
 	SDL_LockMutex(sdlAudioMutex);
 }
 
 void Mixer::Unlock()
 {
+	if (!sdlAudioMutex)
+	{
+		return;
+	}
 	SDL_UnlockMutex(sdlAudioMutex);
 }
 
@@ -466,12 +486,18 @@ void Source::SetPan(double newPan)
 void Source::SetPitch(double newPitch)
 {
 	double newRate;
-	if (newPitch > 0.)
+	if (newPitch > 0. && gMixer.samplerate > 0)
 	{
 		newRate = samplerate / (double) gMixer.samplerate * newPitch;
 	}
 	else
 	{
+		// gMixer.samplerate is 0 if InitWithSDL() was never called (no
+		// audio driver/POMME_NO_SOUND_MIXER) - dividing by it would yield
+		// inf/nan, and casting that to int below is undefined behavior
+		// that traps as an illegal instruction on ARM instead of just
+		// producing a garbage value, crashing with no catchable exception
+		// and no log line (this call happens before any Mixer::Lock()).
 		newRate = 0.001;
 	}
 	rate = (int) FX_FROM_FLOAT(newRate);
